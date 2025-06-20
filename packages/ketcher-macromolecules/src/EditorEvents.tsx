@@ -15,8 +15,10 @@
  ***************************************************************************/
 import { useCallback, useEffect } from 'react';
 import {
+  hasAntisenseChains,
   selectEditor,
   selectEditorActiveTool,
+  selectIsContextMenuActive,
   selectTool,
   showPreview,
 } from 'state/common';
@@ -34,6 +36,8 @@ import {
   Nucleotide,
   PolymerBond,
   HydrogenBond,
+  BackBoneSequenceNode,
+  ToolName,
 } from 'ketcher-core';
 import { selectAllPresets } from 'state/rna-builder';
 import {
@@ -46,17 +50,32 @@ import {
   PreviewType,
 } from 'state/types';
 import { calculateBondPreviewPosition } from 'ketcher-react';
+import { loadMonomerLibrary } from 'state/library';
 
-const noPreviewTools = ['bond-single'];
+const noPreviewTools = [ToolName.bondSingle, ToolName.selectRectangle];
 
 export const EditorEvents = () => {
   const editor = useAppSelector(selectEditor);
   const activeTool = useAppSelector(selectEditorActiveTool);
+  const isContextMenuActive = useAppSelector(selectIsContextMenuActive);
   const dispatch = useAppDispatch();
   const presets = useAppSelector(selectAllPresets);
+  const hasAtLeastOneAntisense = useAppSelector(hasAntisenseChains);
+
+  const handleMonomersLibraryUpdate = useCallback(() => {
+    dispatch(loadMonomerLibrary(editor?.monomersLibrary));
+  }, [editor]);
 
   useEffect(() => {
-    const handler = (toolName: string) => {
+    editor?.events.updateMonomersLibrary.add(handleMonomersLibraryUpdate);
+
+    return () => {
+      editor?.events.updateMonomersLibrary.remove(handleMonomersLibraryUpdate);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    const handler = ([toolName]: [string]) => {
       if (toolName !== activeTool) {
         dispatch(selectTool(toolName));
       }
@@ -73,7 +92,7 @@ export const EditorEvents = () => {
       );
 
       dispatch(selectTool('select-rectangle'));
-      editor.events.selectTool.dispatch('select-rectangle');
+      editor.events.selectTool.dispatch(['select-rectangle']);
       editor.events.openMonomerConnectionModal.add(
         (additionalProps: MonomerConnectionOnlyProps) =>
           dispatch(
@@ -112,7 +131,7 @@ export const EditorEvents = () => {
   );
 
   useEffect(() => {
-    const handler = (toolName: string) => {
+    const handler = ([toolName]: [string]) => {
       if (toolName !== activeTool) {
         dispatch(selectTool(toolName));
       }
@@ -129,7 +148,7 @@ export const EditorEvents = () => {
       );
 
       dispatch(selectTool('select-rectangle'));
-      editor.events.selectTool.dispatch('select-rectangle');
+      editor.events.selectTool.dispatch(['select-rectangle']);
       editor.events.openMonomerConnectionModal.add(
         (additionalProps: MonomerConnectionOnlyProps) =>
           dispatch(
@@ -163,6 +182,20 @@ export const EditorEvents = () => {
 
   const handleOpenPreview = useCallback(
     (e) => {
+      if (e.buttons === 1) {
+        return;
+      }
+
+      if (e.buttons === 2) {
+        return;
+      }
+
+      if (isContextMenuActive) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       const polymerBond = e.target.__data__?.polymerBond;
 
       if (
@@ -186,6 +219,10 @@ export const EditorEvents = () => {
       const sequenceNode = e.target.__data__?.node;
       const monomer: BaseMonomer | AmbiguousMonomer =
         e.target.__data__?.monomer || sequenceNode?.monomer;
+
+      if (sequenceNode && sequenceNode instanceof BackBoneSequenceNode) {
+        return;
+      }
 
       if (monomer instanceof AmbiguousMonomer) {
         const ambiguousMonomerPreviewData: AmbiguousMonomerPreviewState = {
@@ -269,7 +306,7 @@ export const EditorEvents = () => {
 
       debouncedShowPreview(monomerPreviewData);
     },
-    [handleOpenBondPreview, debouncedShowPreview, presets],
+    [handleOpenBondPreview, debouncedShowPreview, presets, isContextMenuActive],
   );
 
   const handleClosePreview = useCallback(() => {
@@ -296,18 +333,29 @@ export const EditorEvents = () => {
     editor?.events.mouseOnMoveSequenceItem.add(onMoveHandler);
     editor?.events.mouseOnMovePolymerBond.add(onMoveHandler);
 
+    window.addEventListener('hidePreview', handleClosePreview);
+
     return () => {
       editor?.events.mouseOverMonomer.remove(handleOpenPreview);
       editor?.events.mouseLeaveMonomer.remove(handleClosePreview);
-      editor?.events.mouseOnMoveMonomer.remove(onMoveHandler);
-      editor?.events.mouseOnMoveSequenceItem.remove(onMoveHandler);
-      editor?.events.mouseOnMovePolymerBond.remove(onMoveHandler);
       editor?.events.mouseOverSequenceItem.remove(handleOpenPreview);
       editor?.events.mouseLeaveSequenceItem.remove(handleClosePreview);
       editor?.events.mouseOverPolymerBond.remove(handleOpenPreview);
       editor?.events.mouseLeavePolymerBond.remove(handleClosePreview);
+
+      editor?.events.mouseOnMoveMonomer.remove(onMoveHandler);
+      editor?.events.mouseOnMoveSequenceItem.remove(onMoveHandler);
+      editor?.events.mouseOnMovePolymerBond.remove(onMoveHandler);
+
+      window.removeEventListener('hidePreview', handleClosePreview);
     };
   }, [editor, activeTool, handleOpenPreview, handleClosePreview]);
+
+  useEffect(() => {
+    if (!hasAtLeastOneAntisense) {
+      editor?.events.resetSequenceEditMode.dispatch();
+    }
+  }, [hasAtLeastOneAntisense]);
 
   return <></>;
 };

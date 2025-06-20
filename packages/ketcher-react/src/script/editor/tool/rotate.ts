@@ -15,6 +15,7 @@
  ***************************************************************************/
 
 import {
+  Action,
   Atom,
   Bond,
   FlipDirection,
@@ -27,6 +28,9 @@ import {
   getItemsToFuse,
   isAttachmentBond,
   vectorUtils,
+  getRelSGroupsBySelection,
+  MonomerMicromolecule,
+  RotateMonomerOperation,
 } from 'ketcher-core';
 import assert from 'assert';
 import { intersection, throttle } from 'lodash';
@@ -245,13 +249,57 @@ class RotateTool implements Tool {
 
     const dragCtx = this.dragCtx;
 
-    const action = dragCtx.action
-      ? fromItemsFuse(this.reStruct, dragCtx.mergeItems).mergeWith(
-          dragCtx.action,
-        )
-      : fromItemsFuse(this.reStruct, dragCtx.mergeItems);
-    delete this.dragCtx;
+    let isMergingSGroup = false;
 
+    const { atoms, bonds } = dragCtx.mergeItems ?? {};
+
+    atoms?.forEach((dst: number, src: number) => {
+      if (
+        this.struct.isAtomFromMacromolecule(src) ||
+        this.struct.isAtomFromMacromolecule(dst)
+      ) {
+        isMergingSGroup = true;
+      }
+    });
+    bonds?.forEach((dst: number, src: number) => {
+      if (
+        this.struct.isBondFromMacromolecule(src) ||
+        this.struct.isBondFromMacromolecule(dst)
+      ) {
+        isMergingSGroup = true;
+      }
+    });
+
+    let action: Action = dragCtx.action;
+
+    if (!isMergingSGroup) {
+      action = action
+        ? fromItemsFuse(this.reStruct, dragCtx.mergeItems).mergeWith(action)
+        : fromItemsFuse(this.reStruct, dragCtx.mergeItems);
+    }
+
+    if (this.selection?.atoms) {
+      const sGroups = getRelSGroupsBySelection(
+        this.struct,
+        this.selection?.atoms,
+      );
+      const monomerRotateAction = new Action();
+      sGroups.forEach((sGroup) => {
+        if (sGroup instanceof MonomerMicromolecule) {
+          const angleInRadians = (dragCtx.angle * Math.PI) / 180;
+          monomerRotateAction.addOp(
+            new RotateMonomerOperation({
+              id: sGroup.id,
+              value: angleInRadians,
+            }),
+          );
+        }
+      });
+      monomerRotateAction.perform(this.reStruct);
+      action = action.mergeWith(monomerRotateAction);
+    }
+
+    delete this.dragCtx;
     this.editor.update(action);
 
     if (dragCtx.mergeItems) {

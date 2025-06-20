@@ -37,14 +37,20 @@ export enum EditorType {
 export interface Editor {
   isDitrty: () => boolean;
   setOrigin: () => void;
-  struct: (struct?: Struct, needToCenterStruct?: boolean) => Struct;
-  structToAddFragment: (struct: Struct) => Struct;
+  struct: (
+    struct?: Struct,
+    needToCenterStruct?: boolean,
+    x?: number,
+    y?: number,
+  ) => Struct;
+  structToAddFragment: (struct: Struct, x?: number, y?: number) => Struct;
   subscribe: (eventName: string, handler: (data?: any) => any) => any;
   unsubscribe: (eventName: string, subscriber: any) => void;
   selection: (arg?: EditorSelection | 'all' | null) => EditorSelection | null;
   undo: () => void;
   redo: () => void;
   clear: () => void;
+  clearHistory: () => void;
   options: (value?: any) => any;
   setOptions: (opts: string) => any;
   zoom: (value?: any) => any;
@@ -88,4 +94,6 @@ export interface Editor {
   setMacromoleculeConvertionError: (errorMessage: string) => void;
   clearMacromoleculeConvertionError: () => void;
   serverSettings: object;
+  focusCliparea: () => void;
+  ketcherId: string;
 }

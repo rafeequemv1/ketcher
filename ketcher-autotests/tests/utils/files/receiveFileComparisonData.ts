@@ -1,87 +1,128 @@
+import * as path from 'path';
 import { Page, expect } from '@playwright/test';
 import { Ketcher, MolfileFormat } from 'ketcher-core';
-import { readFileContents, saveToFile } from './readFile';
+import { getTestDataDirectory, readFileContent, saveToFile } from './readFile';
 import {
   getCdx,
   getCdxml,
+  getCml,
+  getIdt,
+  getInchi,
   getKet,
   getMolfile,
+  getRdf,
+  getRxn,
+  getSdf,
   getSmarts,
+  getSequence,
+  getSmiles,
+  getFasta,
+  getExtendedSmiles,
 } from '@utils/formats';
+import { MacromoleculesFileFormatType } from '@tests/pages/constants/fileFormats/macroFileFormats';
+import { SaveStructureDialog } from '@tests/pages/common/SaveStructureDialog';
+import { CommonTopLeftToolbar } from '@tests/pages/common/CommonTopLeftToolbar';
 
 export enum FileType {
   KET = 'ket',
   CDX = 'cdx',
   CDXML = 'cdxml',
   SMARTS = 'smarts',
+  SMILES = 'smi',
+  ExtendedSMILES = 'cxsmi',
+  MOL = 'mol',
+  RXN = 'rxn',
+  CML = 'cml',
+  SDF = 'sdf',
+  InChI = 'inchi',
+  RDF = 'rdf',
+  IDT = 'idt',
+  SEQ = 'seq',
+  FASTA = 'fasta',
 }
 
-const fileTypeHandlers: { [key in FileType]: (page: Page) => Promise<string> } =
-  {
-    [FileType.KET]: getKet,
-    [FileType.CDX]: getCdx,
-    [FileType.CDXML]: getCdxml,
-    [FileType.SMARTS]: getSmarts,
-  };
+type FileTypeHandler =
+  | ((page: Page) => Promise<string>)
+  | ((page: Page, fileFormat?: MolfileFormat) => Promise<string>);
 
-export async function verifyFile(
+const fileTypeHandlers: { [key in FileType]: FileTypeHandler } = {
+  [FileType.KET]: getKet,
+  [FileType.CDX]: getCdx,
+  [FileType.CDXML]: getCdxml,
+  [FileType.SMARTS]: getSmarts,
+  [FileType.SMILES]: getSmiles,
+  [FileType.ExtendedSMILES]: getExtendedSmiles,
+  [FileType.MOL]: getMolfile,
+  [FileType.RXN]: getRxn,
+  [FileType.RDF]: getRdf,
+  [FileType.CML]: getCml,
+  [FileType.SDF]: getSdf,
+  [FileType.InChI]: getInchi,
+  [FileType.IDT]: getIdt,
+  [FileType.SEQ]: getSequence,
+  [FileType.FASTA]: getFasta,
+};
+
+async function getFileContent(
   page: Page,
-  _filename: string,
-  expectedFilename: string,
   fileType: FileType,
-) {
-  // line below for backward compatibility (to comply with prettier)
-  // due to mistake - filename parameter was never make sence,
-  // since we took the original "filename" file directly from the memory but not from file
-  _filename = '';
+  fileFormat?: MolfileFormat,
+): Promise<string> {
+  const handler = fileTypeHandlers[fileType];
 
-  verifyFile2(page, expectedFilename, fileType);
-}
-
-export async function verifyFile2(
-  page: Page,
-  expectedFilename: string,
-  fileType: FileType,
-) {
-  const getFileContent = fileTypeHandlers[fileType];
-
-  if (!getFileContent) {
+  if (!handler) {
     throw new Error(`Unsupported file type: ${fileType}`);
   }
 
-  // This two lines for creating from scratch or for updating exampled files
-  const expectedFileContent = await getFileContent(page);
-  await saveToFile(expectedFilename, expectedFileContent);
+  // If fileFormat is provided ('v2000' or 'v3000'), pass it to the handler
+  return fileFormat
+    ? (handler as (page: Page, fileFormat: MolfileFormat) => Promise<string>)(
+        page,
+        fileFormat,
+      )
+    : (handler as (page: Page) => Promise<string>)(page);
+}
 
+export async function verifyFileExport(
+  page: Page,
+  expectedFilename: string,
+  fileType: FileType,
+  format?: MolfileFormat,
+  metaDataIndexes: number[] = [],
+) {
+  const testDataDir = getTestDataDirectory();
+  const resolvedExpectedFilename = path.resolve(testDataDir, expectedFilename);
+
+  // This two lines for creating from scratch or for updating exampled files
+  const expectedFileContent = await getFileContent(page, fileType, format);
+  await saveToFile(resolvedExpectedFilename, expectedFileContent);
   // This line for filtering out example file content (named as fileExpected)
   // and file content from memory (named as file) from unnessusary data
   const { fileExpected, file } = await receiveFileComparisonData({
     page,
-    expectedFileName: expectedFilename,
+    expectedFileName: resolvedExpectedFilename,
+    fileFormat: format,
+    metaDataIndexes,
   });
-
-  expect(file).toEqual(fileExpected);
-}
-
-export async function verifyMolfile(
-  page: Page,
-  format: 'v2000' | 'v3000',
-  filename: string,
-  expectedFilename: string,
-  metaDataIndexes: number[] = [],
-) {
-  const expectedFile = await getMolfile(page, format);
-  await saveToFile(filename, expectedFile);
-
-  const { fileExpected: molFileExpected, file: molFile } =
-    await receiveFileComparisonData({
-      page,
-      expectedFileName: expectedFilename,
-      fileFormat: format,
-      metaDataIndexes,
-    });
-
-  expect(molFile).toEqual(molFileExpected);
+  // Function to filter lines
+  const filterLines = (lines: string[], indexes: number[]) => {
+    if (indexes.length === 0) {
+      // Default behavior: ignore lines containing '-INDIGO-', 'Ketcher' and '$DATM'
+      return lines.filter(
+        (line) =>
+          !line.includes('-INDIGO-') &&
+          !line.includes('$DATM') &&
+          !line.includes('Ketcher'),
+      );
+    }
+    // If indexes are specified, filter lines by indexes
+    return filterByIndexes(lines, indexes);
+  };
+  // Apply filtering to both files
+  const filteredFile = filterLines(file, metaDataIndexes);
+  const filteredFileExpected = filterLines(fileExpected, metaDataIndexes);
+  // Compare the filtered files
+  expect(filteredFile).toEqual(filteredFileExpected);
 }
 
 const GetFileMethod: Record<string, keyof Ketcher> = {
@@ -97,10 +138,11 @@ const GetFileMethod: Record<string, keyof Ketcher> = {
   cdxml: 'getCDXml' as keyof Ketcher,
   cml: 'getCml',
   inchi: 'getInchi',
-  sdf: 'getSdf',
-  fasta: 'getFasta',
-  seq: 'getSequence',
-  idt: 'getIdt',
+  sdf: 'getSdf' as keyof Ketcher,
+  fasta: 'getFasta' as keyof Ketcher,
+  seq: 'getSequence' as keyof Ketcher,
+  idt: 'getIdt' as keyof Ketcher,
+  rdf: 'getRdf' as keyof Ketcher,
 } as const;
 
 type KetcherApiFunction = (format?: string) => Promise<string>;
@@ -129,17 +171,17 @@ async function receiveFile({
       ? GetFileMethod[fileExtension as keyof typeof GetFileMethod]
       : GetFileMethod.ket;
 
-  const pageData = {
-    format: fileFormat,
-    method: methodName,
-  };
+  const pageData = fileFormat
+    ? { method: methodName, format: fileFormat }
+    : { method: methodName };
 
   await page.waitForFunction(() => window.ketcher);
-  const file = await page.evaluate(
-    ({ method, format }) =>
-      (window.ketcher[method] as KetcherApiFunction)(format),
-    pageData,
-  );
+
+  const file = await page.evaluate(({ method, format }) => {
+    return format
+      ? (window.ketcher[method] as KetcherApiFunction)(format)
+      : (window.ketcher[method] as KetcherApiFunction)();
+  }, pageData);
 
   return file.split('\n');
 }
@@ -171,7 +213,7 @@ export async function receiveFileComparisonData({
   file: string[];
   fileExpected: string[];
 }> {
-  const fileExpected = (await readFileContents(expectedFileName)).split('\n');
+  const fileExpected = (await readFileContent(expectedFileName)).split('\n');
 
   const file = await receiveFile({
     page,
@@ -183,4 +225,16 @@ export async function receiveFileComparisonData({
     file: filterByIndexes(file, metaDataIndexes),
     fileExpected: filterByIndexes(fileExpected, metaDataIndexes),
   };
+}
+
+export async function verifyHELMExport(page: Page, HELMExportExpected = '') {
+  await CommonTopLeftToolbar(page).saveFile();
+  await SaveStructureDialog(page).chooseFileFormat(
+    MacromoleculesFileFormatType.HELM,
+  );
+  const HELMExportResult = await SaveStructureDialog(page).getTextAreaValue();
+
+  expect(HELMExportResult).toEqual(HELMExportExpected);
+
+  await SaveStructureDialog(page).cancel();
 }

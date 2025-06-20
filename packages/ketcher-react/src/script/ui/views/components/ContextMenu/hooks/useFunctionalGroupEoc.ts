@@ -1,4 +1,4 @@
-import { Action, setExpandSGroup } from 'ketcher-core';
+import { Action, ketcherProvider, setExpandMonomerSGroup } from 'ketcher-core';
 import { useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 import { useAppContext } from 'src/hooks';
@@ -15,19 +15,19 @@ type Params = ItemEventParams<FunctionalGroupsContextMenuProps>;
  * Fullname: useFunctionalGroupExpandOrContract
  */
 const useFunctionalGroupEoc = () => {
-  const { getKetcherInstance } = useAppContext();
+  const { ketcherId } = useAppContext();
   const dispatch = useDispatch();
 
   const handler = useCallback(
     ({ props }: Params, toExpand: boolean) => {
-      const editor = getKetcherInstance().editor as Editor;
+      const editor = ketcherProvider.getKetcher(ketcherId).editor as Editor;
       const molecule = editor.render.ctab;
       const selectedFunctionalGroups = props?.functionalGroups;
       const action = new Action();
 
       selectedFunctionalGroups?.forEach((functionalGroup) => {
         action.mergeWith(
-          setExpandSGroup(molecule, functionalGroup.relatedSGroupId, {
+          setExpandMonomerSGroup(molecule, functionalGroup.relatedSGroupId, {
             expanded: toExpand,
           }),
         );
@@ -37,7 +37,7 @@ const useFunctionalGroupEoc = () => {
       editor.rotateController.rerender();
       highlightFG(dispatch, { group: null, id: null });
     },
-    [dispatch, getKetcherInstance],
+    [dispatch, ketcherId],
   );
 
   const hidden = useCallback(({ props }: Params, toExpand: boolean) => {
@@ -47,17 +47,8 @@ const useFunctionalGroupEoc = () => {
       ),
     );
   }, []);
-  const disabled = useCallback(({ props }: Params) => {
-    const editor = getKetcherInstance().editor as Editor;
-    const molecule = editor.render.ctab.molecule;
-    return Boolean(
-      props?.functionalGroups?.every((functionalGroup) =>
-        functionalGroup?.relatedSGroup.isNotContractible(molecule),
-      ),
-    );
-  }, []);
 
-  return [handler, hidden, disabled] as const;
+  return [handler, hidden] as const;
 };
 
 export default useFunctionalGroupEoc;

@@ -1,6 +1,8 @@
 import {
   AmbiguousMonomer,
   BaseMonomer,
+  HydrogenBond,
+  MONOMER_CLASS_TO_CONSTRUCTOR,
   Peptide,
   Phosphate,
   RNABase,
@@ -16,7 +18,6 @@ import {
 import { PolymerBond } from 'domain/entities/PolymerBond';
 import { IVariantMonomer } from 'domain/entities/types';
 import { KetMonomerClass } from 'application/formatters';
-import { MONOMER_CLASS_TO_CONSTRUCTOR } from 'domain/constants/monomers';
 import { MonomerToAtomBond } from 'domain/entities/MonomerToAtomBond';
 
 export function getMonomerUniqueKey(monomer: MonomerItemType) {
@@ -71,6 +72,24 @@ export function isMonomerConnectedToR2RnaBase(monomer?: BaseMonomer) {
     r2PolymerBond instanceof PolymerBond &&
     r2PolymerBond?.getAnotherMonomer(R1ConnectedMonomer) === monomer
   );
+}
+
+export function getPreviousMonomerInChain(monomer: BaseMonomer) {
+  const r1PolymerBond = monomer.attachmentPointsToBonds.R1;
+  const previousMonomer =
+    r1PolymerBond instanceof PolymerBond
+      ? r1PolymerBond?.getAnotherMonomer(monomer)
+      : undefined;
+
+  if (!previousMonomer || !(r1PolymerBond instanceof PolymerBond)) {
+    return undefined;
+  }
+
+  return previousMonomer &&
+    previousMonomer.getAttachmentPointByBond(r1PolymerBond) ===
+      AttachmentPointName.R2
+    ? previousMonomer
+    : undefined;
 }
 
 export function getNextMonomerInChain(
@@ -146,6 +165,19 @@ export function getSugarFromRnaBase(monomer?: BaseMonomer) {
   return r1ConnectedMonomer instanceof Sugar && r3ConnectedMonomer === monomer
     ? r1ConnectedMonomer
     : undefined;
+}
+
+export function isBondBetweenSugarAndBaseOfRna(polymerBond: PolymerBond) {
+  return (
+    (polymerBond.firstMonomerAttachmentPoint === AttachmentPointName.R1 &&
+      isRnaBaseOrAmbiguousRnaBase(polymerBond.firstMonomer) &&
+      polymerBond.secondMonomerAttachmentPoint === AttachmentPointName.R3 &&
+      polymerBond.secondMonomer instanceof Sugar) ||
+    (polymerBond.firstMonomerAttachmentPoint === AttachmentPointName.R3 &&
+      polymerBond.firstMonomer instanceof Sugar &&
+      polymerBond.secondMonomerAttachmentPoint === AttachmentPointName.R1 &&
+      isRnaBaseOrAmbiguousRnaBase(polymerBond.secondMonomer))
+  );
 }
 
 export function getPhosphateFromSugar(monomer?: BaseMonomer) {
@@ -225,6 +257,7 @@ export function isValidNucleoside(
   }
 
   const nextMonomerAfterPhosphate = getNextMonomerInChain(phosphate);
+
   return !nextMonomerAfterPhosphate;
 }
 
@@ -257,3 +290,97 @@ export function isRnaBaseOrAmbiguousRnaBase(
       monomer.monomerClass === KetMonomerClass.Base)
   );
 }
+
+export function isRnaBaseApplicableForAntisense(monomer?: BaseMonomer) {
+  return (
+    monomer instanceof UnsplitNucleotide ||
+    (isRnaBaseOrAmbiguousRnaBase(monomer) &&
+      Boolean(getSugarFromRnaBase(monomer)))
+  );
+}
+
+export function getAllConnectedMonomersRecursively(
+  monomer: BaseMonomer,
+): BaseMonomer[] {
+  const stack = [monomer];
+  const visited = new Set<BaseMonomer>();
+  const connectedMonomers: BaseMonomer[] = [];
+
+  while (stack.length > 0) {
+    const currentMonomer = stack.pop();
+
+    if (!currentMonomer || visited.has(currentMonomer)) {
+      continue;
+    }
+
+    visited.add(currentMonomer);
+    connectedMonomers.push(currentMonomer);
+
+    currentMonomer.forEachBond((bond) => {
+      if (bond instanceof PolymerBond || bond instanceof HydrogenBond) {
+        const anotherMonomer = bond.getAnotherMonomer(currentMonomer);
+        if (anotherMonomer && !visited.has(anotherMonomer)) {
+          stack.push(anotherMonomer);
+        }
+      }
+    });
+  }
+
+  return connectedMonomers;
+}
+
+export const canModifyAminoAcid = (
+  monomer: BaseMonomer,
+  modificationMonomerLibraryItem: MonomerItemType,
+) => {
+  return (
+    (monomer.isAttachmentPointExistAndFree(AttachmentPointName.R1) ||
+      modificationMonomerLibraryItem.props.MonomerCaps?.R1) &&
+    (monomer.isAttachmentPointExistAndFree(AttachmentPointName.R2) ||
+      modificationMonomerLibraryItem.props.MonomerCaps?.R2)
+  );
+};
+
+export const getAminoAcidsToModify = (
+  monomers: BaseMonomer[],
+  modificationType: string,
+  monomersLibrary: MonomerItemType[],
+) => {
+  const naturalAnalogueToModifiedMonomerItem = new Map<
+    string,
+    MonomerItemType
+  >();
+  const aminoAcidsToModify = new Map<BaseMonomer, MonomerItemType>();
+
+  monomersLibrary.forEach((libraryItem) => {
+    if (libraryItem.props?.modificationType !== modificationType) {
+      return;
+    }
+    const monomerNaturalAnalogCode = libraryItem.props.MonomerNaturalAnalogCode;
+
+    if (monomerNaturalAnalogCode) {
+      naturalAnalogueToModifiedMonomerItem.set(
+        monomerNaturalAnalogCode,
+        libraryItem,
+      );
+    }
+  });
+
+  monomers.forEach((monomer) => {
+    const monomerNaturalAnalogCode =
+      monomer.monomerItem.props.MonomerNaturalAnalogCode;
+    const modifiedMonomerItem = naturalAnalogueToModifiedMonomerItem.get(
+      monomerNaturalAnalogCode,
+    );
+
+    if (
+      modifiedMonomerItem &&
+      monomer.label !== modifiedMonomerItem.label &&
+      canModifyAminoAcid(monomer, modifiedMonomerItem)
+    ) {
+      aminoAcidsToModify.set(monomer, modifiedMonomerItem);
+    }
+  });
+
+  return aminoAcidsToModify;
+};

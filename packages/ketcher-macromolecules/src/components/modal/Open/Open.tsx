@@ -29,6 +29,7 @@ import {
   macromoleculesFilesInputFormats,
   ModeTypes,
   SnakeMode,
+  FlexMode,
 } from 'ketcher-core';
 import { IndigoProvider } from 'ketcher-react';
 import { RequiredModalProps } from '../modalContainer';
@@ -175,6 +176,18 @@ const addToCanvas = ({
   const editorHistory = new EditorHistory(editor);
   const isSequenceMode = editor.mode instanceof SequenceMode;
   const isSnakeMode = editor.mode instanceof SnakeMode;
+  const isFlexMode = editor.mode instanceof FlexMode;
+
+  if (isFlexMode) {
+    if (editor.drawingEntitiesManager.hasAntisenseChains) {
+      modelChanges.merge(
+        editor.drawingEntitiesManager.applySnakeLayout(true, true, true),
+      );
+      modelChanges.setUndoOperationsByPriority();
+    }
+  }
+
+  editor.drawingEntitiesManager.detectBondsOverlappedByMonomers();
 
   editor.renderersContainer.update(modelChanges);
   editorHistory.update(modelChanges);
@@ -400,6 +413,7 @@ const Open = ({ isModalOpen, onClose }: RequiredModalProps) => {
           clickHandler={openHandler}
           label="Open as New"
           styleType="secondary"
+          data-testid="open-as-new-button"
         />
         <FooterButton
           key="copyButton"
@@ -419,6 +433,7 @@ const Open = ({ isModalOpen, onClose }: RequiredModalProps) => {
       title="Open Structure"
       onClose={onCloseCallback}
       modalWidth={currentState === MODAL_STATES.textEditor ? '620px' : ''}
+      testId="openStructureModal"
     >
       <Modal.Content>
         <OpenFileWrapper currentState={currentState}>

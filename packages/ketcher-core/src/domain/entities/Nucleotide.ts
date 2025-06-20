@@ -9,15 +9,15 @@ import {
   isValidNucleotide,
 } from 'domain/helpers/monomers';
 import { SubChainNode } from 'domain/entities/monomer-chains/types';
-import { CoreEditor } from 'application/editor/internal';
+import { Coordinates, CoreEditor } from 'application/editor/internal';
 import { Vec2 } from 'domain/entities/vec2';
-import {
-  getRnaPartLibraryItem,
-  getSugarBySequenceType,
-} from 'domain/helpers/rna';
+import { getRnaPartLibraryItem } from 'domain/helpers/rna';
 import { RNA_DNA_NON_MODIFIED_PART } from 'domain/constants/monomers';
 import { BaseMonomer } from 'domain/entities/BaseMonomer';
 import { AmbiguousMonomer } from 'domain/entities/AmbiguousMonomer';
+import { SugarRenderer } from 'application/render';
+import { KetMonomerClass } from 'application/formatters';
+import { SnakeLayoutCellWidth } from 'domain/constants';
 
 export class Nucleotide {
   constructor(
@@ -25,6 +25,14 @@ export class Nucleotide {
     public rnaBase: RNABase | AmbiguousMonomer,
     public phosphate: Phosphate,
   ) {}
+
+  toString() {
+    return (
+      `sugar: ${this.sugar.constructor.name}, ` +
+      `rnaBase: ${this.rnaBase.constructor.name}, ` +
+      `phosphate: ${this.phosphate.constructor.name}`
+    );
+  }
 
   static fromSugar(sugar: Sugar, needValidation = true) {
     if (needValidation) {
@@ -47,30 +55,50 @@ export class Nucleotide {
     );
   }
 
-  static createOnCanvas(rnaBaseName: string, position: Vec2) {
+  static createOnCanvas(
+    rnaBaseName: string,
+    position: Vec2,
+    sugarName: RNA_DNA_NON_MODIFIED_PART = RNA_DNA_NON_MODIFIED_PART.SUGAR_RNA,
+  ) {
     const editor = CoreEditor.provideEditorInstance();
-    const rnaBaseLibraryItem = getRnaPartLibraryItem(editor, rnaBaseName);
+    const isDnaSugar = sugarName === RNA_DNA_NON_MODIFIED_PART.SUGAR_DNA;
+    const rnaBaseLibraryItem = getRnaPartLibraryItem(
+      editor,
+      rnaBaseName,
+      KetMonomerClass.Base,
+      isDnaSugar,
+    );
     const phosphateLibraryItem = getRnaPartLibraryItem(
       editor,
       RNA_DNA_NON_MODIFIED_PART.PHOSPHATE,
     );
-    const sugarName = getSugarBySequenceType(editor.sequenceTypeEnterMode);
-    assert(sugarName);
-
-    const sugarLibraryItem = getRnaPartLibraryItem(editor, sugarName);
+    const sugarLibraryItem = getRnaPartLibraryItem(
+      editor,
+      sugarName,
+      KetMonomerClass.Sugar,
+    );
 
     assert(sugarLibraryItem);
     assert(rnaBaseLibraryItem);
     assert(phosphateLibraryItem);
 
+    const topLeftItemPosition = position;
+    const bottomItemPosition = position.add(
+      Coordinates.canvasToModel(
+        new Vec2(0, SnakeLayoutCellWidth + SugarRenderer.monomerSize.height),
+      ),
+    );
+
     const { command: modelChanges, monomers } =
       editor.drawingEntitiesManager.addRnaPreset({
         sugar: sugarLibraryItem,
-        sugarPosition: position,
+        sugarPosition: topLeftItemPosition,
         rnaBase: rnaBaseLibraryItem,
-        rnaBasePosition: position,
+        rnaBasePosition: bottomItemPosition,
         phosphate: phosphateLibraryItem,
-        phosphatePosition: position,
+        phosphatePosition: topLeftItemPosition.add(
+          Coordinates.canvasToModel(new Vec2(SnakeLayoutCellWidth, 0)),
+        ),
       });
 
     const sugar = monomers.find((monomer) => monomer instanceof Sugar) as Sugar;

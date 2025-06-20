@@ -16,8 +16,9 @@ import {
   AtomQueryProperties,
   AtomAllAttributeName,
   Atom,
+  ketcherProvider,
 } from 'ketcher-core';
-import { atom } from 'src/script/ui/data/schema/struct-schema';
+import { atom } from '../../../../data/schema/struct-schema';
 import styles from '../ContextMenu.module.less';
 import useAddAttachmentPoint from '../hooks/useAddAttachmentPoint';
 import { isNumber } from 'lodash';
@@ -102,8 +103,9 @@ const AtomMenuItems: FC<MenuItemsProps<AtomContextMenuProps>> = (props) => {
   const [handleRemoveAttachmentPoint] = useRemoveAttachmentPoint();
   const [handleStereo, stereoDisabled] = useAtomStereo();
   const handleDelete = useDelete();
-  const { getKetcherInstance } = useAppContext();
-  const editor = getKetcherInstance().editor as Editor;
+  const { ketcherId } = useAppContext();
+  const ketcher = ketcherProvider.getKetcher(ketcherId);
+  const editor = ketcher.editor as Editor;
   const struct = editor.struct();
 
   const getPropertyValue = (key: AtomAllAttributeName) => {
@@ -171,7 +173,6 @@ const AtomMenuItems: FC<MenuItemsProps<AtomContextMenuProps>> = (props) => {
             attachmentPoint.attachmentPointNumber,
       ),
   );
-
   const highlightAtomWithColor = (color: string) => {
     const atomIds = props.propsFromTrigger?.atomIds || [];
     editor.highlights.create({
@@ -181,6 +182,22 @@ const AtomMenuItems: FC<MenuItemsProps<AtomContextMenuProps>> = (props) => {
       color: color === '' ? 'transparent' : color,
     });
   };
+
+  const isAddAttachmentPointDisabled =
+    !onlyOneAtomSelected ||
+    (() => {
+      if (!isNumber(selectedAtomId)) return true;
+
+      const connectedComponents = struct.findConnectedComponent(selectedAtomId);
+      for (const connectedAtomId of connectedComponents) {
+        const connectedGroup = struct.getGroupFromAtomId(connectedAtomId);
+        if (connectedGroup?.isMonomer) {
+          return true;
+        }
+      }
+
+      return false;
+    })();
 
   if (isAtomSuperatomLeavingGroup && onlyOneAtomSelected) {
     return (
@@ -231,7 +248,11 @@ const AtomMenuItems: FC<MenuItemsProps<AtomContextMenuProps>> = (props) => {
         !atomInSgroupWithLabel &&
         !maxAttachmentPointsAmount &&
         !isAtomSuperatomLeavingGroup && (
-          <Item {...props} onClick={handleAddAttachmentPoint}>
+          <Item
+            {...props}
+            onClick={handleAddAttachmentPoint}
+            disabled={isAddAttachmentPointDisabled}
+          >
             Add attachment point
           </Item>
         )}

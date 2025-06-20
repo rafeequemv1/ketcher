@@ -25,7 +25,8 @@ import { RNABase } from 'domain/entities/RNABase';
 import { Phosphate } from 'domain/entities/Phosphate';
 import { Coordinates } from '../shared/coordinates';
 
-export const RNA_MONOMER_DISTANCE = 22.5;
+import { SnakeLayoutCellWidth } from 'domain/constants';
+
 class RnaPresetTool implements Tool {
   rnaBase: MonomerItemType | undefined;
   sugar: MonomerItemType | undefined;
@@ -78,9 +79,7 @@ class RnaPresetTool implements Tool {
         phosphatePosition: this.phosphatePreviewRenderer
           ? Coordinates.canvasToModel(
               new Vec2(
-                this.editor.lastCursorPositionOfCanvas.x +
-                  this.sugarPreviewRenderer?.width +
-                  RNA_MONOMER_DISTANCE,
+                this.editor.lastCursorPositionOfCanvas.x + SnakeLayoutCellWidth,
                 this.editor.lastCursorPositionOfCanvas.y,
               ),
             )
@@ -90,9 +89,7 @@ class RnaPresetTool implements Tool {
           ? Coordinates.canvasToModel(
               new Vec2(
                 this.editor.lastCursorPositionOfCanvas.x,
-                this.editor.lastCursorPositionOfCanvas.y +
-                  this.sugarPreviewRenderer.height +
-                  RNA_MONOMER_DISTANCE,
+                this.editor.lastCursorPositionOfCanvas.y + SnakeLayoutCellWidth,
               ),
             )
           : undefined,

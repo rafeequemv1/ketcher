@@ -20,6 +20,10 @@ export class FlexMode extends BaseMode {
 
     editor.renderersContainer.update(modelChanges);
 
+    if (this.previousMode === 'sequence-layout-mode') {
+      editor.scrollToTopLeftCorner();
+    }
+
     return command;
   }
 
@@ -30,7 +34,22 @@ export class FlexMode extends BaseMode {
   }
 
   applyAdditionalPasteOperations() {
-    return new Command();
+    const command = new Command();
+    const editor = CoreEditor.provideEditorInstance();
+
+    editor.drawingEntitiesManager.recalculateAntisenseChains();
+
+    if (!editor.drawingEntitiesManager.hasAntisenseChains) {
+      return command;
+    }
+
+    command.merge(
+      editor.drawingEntitiesManager.applySnakeLayout(true, true, true),
+    );
+
+    command.setUndoOperationsByPriority();
+
+    return command;
   }
 
   isPasteAllowedByMode(): boolean {

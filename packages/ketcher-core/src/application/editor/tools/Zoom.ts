@@ -49,7 +49,7 @@ export class ZoomTool implements BaseTool {
   private zoomTransform: ZoomTransform;
   private resizeObserver: ResizeObserver | null = null;
   drawingEntitiesManager: DrawingEntitiesManager;
-  private zoomEventHandlers: Array<(transform?) => void> = [];
+  private zoomEventHandlers: Array<(transform?: ZoomTransform) => void> = [];
   private scrollBars!: {
     horizontal: ScrollBar;
     vertical: ScrollBar;
@@ -135,27 +135,35 @@ export class ZoomTool implements BaseTool {
     });
   }
 
-  subscribeOnZoomEvent(zoomEventHandler: (transform?) => void) {
+  subscribeOnZoomEvent(zoomEventHandler: (transform?: ZoomTransform) => void) {
     this.zoomEventHandlers.push(zoomEventHandler);
   }
 
-  dispatchZoomEventHandlers(transform) {
+  unsubscribeOnZoomEvent(
+    zoomEventHandler: (transform?: ZoomTransform) => void,
+  ) {
+    this.zoomEventHandlers = this.zoomEventHandlers.filter(
+      (handler) => handler !== zoomEventHandler,
+    );
+  }
+
+  dispatchZoomEventHandlers(transform: ZoomTransform) {
     this.zoomEventHandlers.forEach((zoomEventHandler) => {
       zoomEventHandler(transform);
     });
   }
 
-  drawScrollBars() {
+  drawScrollBars(forceHide = false) {
     if (this.canvas.node() && this.canvasWrapper.node()) {
       this.initScrollBars();
-      this.renderScrollBar(this.scrollBars.horizontal);
-      this.renderScrollBar(this.scrollBars.vertical);
+      this.renderScrollBar(this.scrollBars.horizontal, forceHide);
+      this.renderScrollBar(this.scrollBars.vertical, forceHide);
     }
   }
 
-  renderScrollBar(scrollBar: ScrollBar) {
+  renderScrollBar(scrollBar: ScrollBar, forceHide = false) {
     const hasOffset = scrollBar.offsetStart < 0 || scrollBar.offsetEnd < 0;
-    if (hasOffset) {
+    if (hasOffset && !forceHide) {
       if (scrollBar.bar) {
         this.updateScrollBarAttrs(scrollBar);
       } else {
@@ -273,6 +281,7 @@ export class ZoomTool implements BaseTool {
 
   public scrollToVerticalBottom() {
     this.drawScrollBars();
+
     if (this.scrollBars.vertical.offsetEnd < 0) {
       this.zoom?.translateBy(
         this.canvasWrapper,
@@ -400,8 +409,8 @@ export class ZoomTool implements BaseTool {
   }
 
   destroy() {
-    this.scrollBars.horizontal?.bar?.remove();
-    this.scrollBars.vertical?.bar?.remove();
+    this.scrollBars?.horizontal?.bar?.remove();
+    this.scrollBars?.vertical?.bar?.remove();
     this.resizeObserver?.unobserve(this.canvasWrapper.node() as SVGSVGElement);
     this.zoom = null;
     this.zoomEventHandlers = [];

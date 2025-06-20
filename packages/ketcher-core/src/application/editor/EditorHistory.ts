@@ -17,6 +17,8 @@
 import { Command } from 'domain/entities/Command';
 import { CoreEditor } from './Editor';
 import assert from 'assert';
+import { ketcherProvider } from 'application/utils';
+import { notifyRenderComplete } from 'application/render';
 const HISTORY_SIZE = 32; // put me to options
 
 export type HistoryOperationType = 'undo' | 'redo';
@@ -24,7 +26,7 @@ export type HistoryOperationType = 'undo' | 'redo';
 export class EditorHistory {
   historyStack: Command[] | [] = [];
   historyPointer = 0;
-  editor: CoreEditor | undefined;
+  editor!: CoreEditor;
 
   private static _instance;
   constructor(editor: CoreEditor) {
@@ -35,7 +37,6 @@ export class EditorHistory {
     this.historyPointer = 0;
 
     EditorHistory._instance = this;
-
     return this;
   }
 
@@ -50,13 +51,14 @@ export class EditorHistory {
       }
       this.historyPointer = this.historyStack.length;
     }
+    ketcherProvider.getKetcher(this.editor.ketcherId)?.changeEvent.dispatch();
   }
 
   undo() {
     if (this.historyPointer === 0) {
       return;
     }
-
+    ketcherProvider.getKetcher(this.editor.ketcherId)?.changeEvent.dispatch();
     assert(this.editor);
 
     this.historyPointer--;
@@ -71,13 +73,17 @@ export class EditorHistory {
     if (this.historyPointer === this.historyStack.length) {
       return;
     }
-
+    ketcherProvider.getKetcher(this.editor.ketcherId)?.changeEvent.dispatch();
     assert(this.editor);
 
     const lastCommand = this.historyStack[this.historyPointer];
     lastCommand.execute(this.editor.renderersContainer);
-    lastCommand.executeAfterAllOperations(this.editor.renderersContainer);
     this.historyPointer++;
+    notifyRenderComplete();
+  }
+
+  public get previousCommand() {
+    return this.historyStack[this.historyPointer - 1];
   }
 
   destroy() {

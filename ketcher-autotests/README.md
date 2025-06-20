@@ -75,10 +75,6 @@ getBottomBondByAttributes - get bottom bond by attributes
 getLeftBondByAttributes - get left bond by attributes
 getFirstBondCoordinatesByAttributes - get one bond by attributes
 
-To select tools with nested / sub levels use:
-
-selectNestedTool - select specific tool that has sub / nested levels.
-
 ## Docker
 
 - Docker runs automatically in the pipeline after pushing changes to the repository.
@@ -98,20 +94,13 @@ selectNestedTool - select specific tool that has sub / nested levels.
   - DOCKER=true
   - KETCHER_URL
     - Rc: KETCHER_URL=link_to_rc
-    - Local frontend: KETCHER_URL=http://host.docker.internal:port (port where you run application)
+    - Local frontend: KETCHER_URL=http://localhost:4002
   - OPTIONAL: IGNORE_UNSTABLE_TESTS=true (if you want to ignore unstable tests)
-  - OPTIONAL: ENABLE_POLYMER_EDITOR=true (If you want to run tests for Macromolecule Editor)
-- **OPTIONAL: Build frontend**:
-  if you want to run tests based on the localhost:4002, you can put KETCHER_URL=http://localhost:4002
+  - OPTIONAL: NUM_WORKERS=8 (default=num cpus, if you want to define custom number of workers)
 
 ### Run tests:
 
-**OPTIONAL: Test Polymer Editor **:
-If you want to run tests from Macromolecule Editor, add `ENABLE_POLYMER_EDITOR=true` in scripts:
-
-- Root package.json: "build:example": "ENABLE_POLYMER_EDITOR=true npm run build -w example";
-
-Also make sure, that test is not skipped! Check if test starts with
+Make sure that test is not skipped! Check if test starts with
 `test.skip('We test something', async ({ page }) => {`
 Remove "skip" before running.
 
@@ -121,7 +110,7 @@ Remove "skip" before running.
 - `npm run build`
 - `npm run serve`
 
-- **Run docker**:
+- **Run tests using docker**:
 
   - `cd ketcher-autotests`
   - `npm run docker:build`
@@ -145,6 +134,43 @@ Run this command in the directory "ketcher-autotests"
 - `npm run docker:update` update all snapshots
 - `npm run docker:update file_name:N` update specific test in a file (N - line on which test starts)
 - `npm run docker:update:test -- "test_title"` update only 1 snapshot with test_title
+
+### Testing without installed NPM
+
+If no NPM installed (only docker) to build ketcher the same compiler as on CI platforms, use the following command
+
+Build Ketcher
+
+```
+docker-compose build ketcher
+docker-compose run --rm --user $(id -u) ketcher bash /app/test_build.sh
+```
+
+Prepare tests
+
+```
+mkdir build
+docker-compose build autotests
+docker-compose run --rm --user $(id -u) autotests bash /app/test_prepare.sh
+```
+
+Run tests
+
+```
+docker-compose run --rm --user $(id -u) autotests bash /app/test_run.sh
+```
+
+Run pattern
+
+```
+docker-compose run --rm --user $(id -u) autotests bash /app/test_run.sh -g "Cut the reaction"
+```
+
+Run update
+
+```
+docker-compose run --rm --user $(id -u) autotests bash /app/test_run.sh -g "Cut the reaction" --update-snapshots
+```
 
 ### Known issues
 

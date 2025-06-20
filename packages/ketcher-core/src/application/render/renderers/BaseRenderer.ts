@@ -29,6 +29,7 @@ export abstract class BaseRenderer implements IBaseRenderer {
     | D3SvgElementSelection<SVGRectElement, void>
     | D3SvgElementSelection<SVGPathElement, void>;
 
+  // An extra invisible area around `bodyElement` to make it easier for a user to hover over it.
   protected hoverAreaElement?: D3SvgElementSelection<
     SVGGElement | SVGLineElement,
     void
@@ -113,6 +114,10 @@ export abstract class BaseRenderer implements IBaseRenderer {
       this.removeHover();
       this.hoverElement = undefined;
     }
+  }
+
+  public setVisibility(isVisible: boolean) {
+    this.rootElement?.style('opacity', isVisible ? 1 : 0);
   }
 
   move() {}

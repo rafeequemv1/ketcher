@@ -25,12 +25,16 @@ import {
   VisibleItem,
 } from './styles';
 import { EmptyFunction } from 'helpers';
+import { IconName } from 'ketcher-react';
 
 type SubMenuProps = {
   vertical?: boolean;
   disabled?: boolean;
   needOpenByMenuItemClick?: boolean;
   testId?: string;
+  layoutModeButton?: boolean;
+  generalTitle?: string;
+  activeItem?: IconName;
 };
 
 const SubMenu = ({
@@ -39,6 +43,9 @@ const SubMenu = ({
   disabled = false,
   needOpenByMenuItemClick = false,
   testId,
+  layoutModeButton = false,
+  generalTitle,
+  activeItem,
 }: React.PropsWithChildren<SubMenuProps>) => {
   const [open, setOpen] = useState(false);
   const { isActive } = useMenuContext();
@@ -63,13 +70,13 @@ const SubMenu = ({
     .map((item) => item.props.itemId)
     .filter((item) => item);
   const activeOption = options.filter((itemKey) => isActive(itemKey));
-  const visibleItemId = activeOption.length ? activeOption[0] : options[0];
+  const visibleItemId =
+    activeItem ?? (activeOption.length ? activeOption[0] : options[0]);
   const visibleItem = subComponents.find(
     (option) => option.props.itemId === visibleItemId,
   );
   const visibleItemTestId = visibleItem?.props.testId;
-  const visibleItemTitle = visibleItem?.props.title;
-
+  const visibleItemTitle = generalTitle ?? visibleItem?.props.title;
   return (
     <RootContainer data-testid={testId}>
       <VisibleItem>
@@ -88,6 +95,7 @@ const SubMenu = ({
             name="dropdown"
             onClick={handleDropDownClick}
             isActive={isActive(visibleItemId)}
+            dataTestId="dropdown-expand"
           />
         )}
       </VisibleItem>
@@ -98,7 +106,11 @@ const SubMenu = ({
         onClick={hideCollapse}
       >
         <ClickAwayListener onClickAway={hideCollapse}>
-          <OptionsContainer isVertical={vertical}>
+          <OptionsContainer
+            isVertical={vertical}
+            islayoutModeButton={layoutModeButton}
+            data-testid="multi-tool-dropdown"
+          >
             {subComponents.map((component) => component)}
           </OptionsContainer>
         </ClickAwayListener>
